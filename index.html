@@ -19,40 +19,87 @@
             overflow: hidden;
             background-color: #fff;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
         }
         .gallery-item img {
             width: 100%;
-            height: 100%;
+            height: 200px;
             object-fit: cover;
             display: block;
         }
+        .filename {
+            padding: 8px;
+            font-size: 12px;
+            text-align: center;
+            word-break: break-all;
+            background-color: #fafafa;
+            color: #555;
+            border-top: 1px solid #eee;
+        }
+        /* Lightbox styles */
+        .lightbox {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            justify-content: center;
+            align-items: center;
+        }
+        .lightbox-content {
+            max-width: 90%;
+            max-height: 80%;
+        }
+        .lightbox-close, .lightbox-prev, .lightbox-next {
+            position: absolute;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .lightbox-close { top: 20px; right: 35px; }
+        .lightbox-prev, .lightbox-next { top: 50%; transform: translateY(-50%); }
+        .lightbox-prev { left: 20px; }
+        .lightbox-next { right: 20px; }
     </style>
 </head>
 <body>
 
     <h1>My Photo Gallery</h1>
-    <div id="gallery" class="gallery">
-        </div>
+    <div id="gallery" class="gallery"></div>
+
+    <div id="lightbox" class="lightbox">
+        <span class="lightbox-close">&times;</span>
+        <img class="lightbox-content" id="lightbox-img">
+        <span class="lightbox-prev">&#10094;</span>
+        <span class="lightbox-next">&#10095;</span>
+    </div>
 
     <script>
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         // ★ ↓↓↓この行のURLを、あなたのBlob StorageのURLに書き換えてください↓↓↓ ★
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        const blobContainerUrl = "https://aiphotogallerystorage.blob.core.windows.net/images";
+        const blobContainerUrl = "https://aiphotostorage.blob.core.windows.net/images";
+
+        let imageUrls = [];
+        let currentImageIndex = 0;
 
         async function getImages() {
             const gallery = document.getElementById('gallery');
             gallery.innerHTML = '<p>写真を読み込んでいます...</p>';
 
             try {
-                // コンテナー内のファイル一覧を取得
                 const response = await fetch(`${blobContainerUrl}?restype=container&comp=list`);
                 const data = await response.text();
                 
                 const xml = new DOMParser().parseFromString(data, 'text/xml');
                 const blobs = xml.getElementsByTagName('Blob');
                 
-                gallery.innerHTML = ''; // ローディング表示を消去
+                gallery.innerHTML = '';
+                imageUrls = [];
 
                 if (blobs.length === 0) {
                     gallery.innerHTML = '<p>写真がありません。Azure Storage Explorerからアップロードしてください。</p>';
@@ -61,23 +108,30 @@
 
                 for (let i = 0; i < blobs.length; i++) {
                     const name = blobs[i].getElementsByTagName('Name')[0].textContent;
-                    const imageUrl = `${blobContainerUrl}/${name}`;
                     
-                    const a = document.createElement('a');
-                    a.href = imageUrl;
-                    a.target = '_blank'; // 新しいタブで開く
-                    a.rel = 'noopener noreferrer';
+                    // Skip folders (blobs ending with '/')
+                    if (name.endsWith('/')) {
+                        continue;
+                    }
+
+                    const imageUrl = `${blobContainerUrl}/${name}`;
+                    imageUrls.push(imageUrl);
+                    
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'gallery-item';
+                    itemDiv.onclick = () => openLightbox(imageUrls.length - 1);
 
                     const img = document.createElement('img');
                     img.src = imageUrl;
                     img.alt = name;
-                    img.loading = 'lazy'; // 遅延読み込み
+                    img.loading = 'lazy';
 
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'gallery-item';
-
-                    a.appendChild(img);
-                    itemDiv.appendChild(a);
+                    const filenameDiv = document.createElement('div');
+                    filenameDiv.className = 'filename';
+                    filenameDiv.textContent = name;
+                    
+                    itemDiv.appendChild(img);
+                    itemDiv.appendChild(filenameDiv);
                     gallery.appendChild(itemDiv);
                 }
 
@@ -87,7 +141,40 @@
             }
         }
 
-        // ページが読み込まれたら写真を取得
+        // Lightbox functions
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+
+        function openLightbox(index) {
+            currentImageIndex = index;
+            updateLightboxImage();
+            lightbox.style.display = 'flex';
+        }
+
+        function closeLightbox() {
+            lightbox.style.display = 'none';
+        }
+
+        function changeImage(direction) {
+            currentImageIndex += direction;
+            if (currentImageIndex >= imageUrls.length) {
+                currentImageIndex = 0;
+            } else if (currentImageIndex < 0) {
+                currentImageIndex = imageUrls.length - 1;
+            }
+            updateLightboxImage();
+        }
+
+        function updateLightboxImage() {
+            if (imageUrls.length > 0) {
+                lightboxImg.src = imageUrls[currentImageIndex];
+            }
+        }
+
+        document.querySelector('.lightbox-close').onclick = closeLightbox;
+        document.querySelector('.lightbox-prev').onclick = () => changeImage(-1);
+        document.querySelector('.lightbox-next').onclick = () => changeImage(1);
+
         document.addEventListener('DOMContentLoaded', getImages);
     </script>
 
